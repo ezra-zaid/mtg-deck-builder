@@ -1555,15 +1555,29 @@ function showPlaytestModal() {
   // Zone state
   let library = [], hand = [], battlefield = [], graveyard = [], exile = [];
   let turn = 0, mulliganSize = 7;
-  let selectedHandIdx = -1; // which hand card is selected for actions
+  let selectedHandIdx = -1;
   let tokens = 0;
+  let cmdOnBattlefield = false;
+  let cmdTax = 0; // times commander was cast from command zone
 
   // ── Actions ──
   function newGame() {
     library = shuffle(allCards);
     hand = []; battlefield = []; graveyard = []; exile = [];
     turn = 1; mulliganSize = 7; selectedHandIdx = -1; tokens = 0;
+    cmdOnBattlefield = false; cmdTax = 0;
     hand.push(...library.splice(0, 7));
+    render();
+  }
+
+  function castCommander() {
+    cmdOnBattlefield = true;
+    cmdTax++;
+    render();
+  }
+
+  function returnCmdToZone() {
+    cmdOnBattlefield = false;
     render();
   }
 
@@ -1724,29 +1738,78 @@ function showPlaytestModal() {
   function render() {
     renderBadges();
 
-    // Commander
+    // Commander zone
     cmdStrip.innerHTML = '';
     if (state.commander) {
       const cmdLabel = document.createElement('span');
       cmdLabel.className = 'playtest-zone-label';
-      cmdLabel.textContent = 'Command Zone:';
-      const t = makeThumb(state.commander, null);
-      cmdStrip.append(cmdLabel, t);
+      cmdLabel.textContent = 'Command Zone';
+
+      if (cmdOnBattlefield) {
+        // Show a "on battlefield" placeholder in the command zone
+        const awayNote = document.createElement('span');
+        awayNote.className = 'cmd-away-note';
+        awayNote.textContent = `${state.commander.name} is on the battlefield`;
+        cmdStrip.append(cmdLabel, awayNote);
+      } else {
+        // Commander is in command zone — show card + Cast button
+        const cmdCard = document.createElement('div');
+        cmdCard.className = 'playtest-card cmd-zone-card';
+
+        const img = document.createElement('img');
+        img.className = 'playtest-thumb';
+        img.src = getImage(state.commander, 'small') || '';
+        img.alt = state.commander.name;
+        img.addEventListener('mouseenter', e => showPreview(state.commander, e));
+        img.addEventListener('mouseleave', hidePreview);
+        img.addEventListener('mousemove', movePreview);
+
+        const castBtn = document.createElement('button');
+        castBtn.className = 'btn btn-xs btn-gold cmd-cast-btn';
+        castBtn.textContent = cmdTax > 0 ? `Cast (+${cmdTax * 2} tax)` : 'Cast';
+        castBtn.title = cmdTax > 0
+          ? `Commander tax: costs ${cmdTax * 2} additional generic mana`
+          : 'Play commander onto the battlefield';
+        castBtn.addEventListener('click', castCommander);
+
+        cmdCard.append(img, castBtn);
+        cmdStrip.append(cmdLabel, cmdCard);
+      }
     }
 
     // Battlefield
-    bfZone._label.textContent = `Battlefield — ${battlefield.length} permanent(s)  ·  click to tap/untap  ·  double-click to sacrifice`;
+    // Add commander to battlefield display if on battlefield
+    const bfDisplay = [...battlefield];
+    if (cmdOnBattlefield) bfDisplay.unshift({ card: state.commander, tapped: false, isCommander: true });
+
+    bfZone._label.textContent = `Battlefield — ${bfDisplay.length} permanent(s)  ·  click to tap/untap  ·  double-click to remove`;
     bfZone._cards.innerHTML = '';
-    battlefield.forEach((entry, idx) => {
+    bfDisplay.forEach((entry, idx) => {
+      const isCmd = entry.isCommander;
       const el = makeThumb(entry.card, () => {
         entry.tapped = !entry.tapped;
         el.classList.toggle('tapped', entry.tapped);
-      }, entry.tapped ? 'tapped' : '');
+      }, (entry.tapped ? 'tapped ' : '') + (isCmd ? 'cmd-on-battlefield' : ''));
+
       el.addEventListener('dblclick', e => {
         e.stopPropagation();
-        graveyard.push(battlefield.splice(idx, 1)[0].card);
-        render();
+        if (isCmd) {
+          // Commander goes back to command zone
+          returnCmdToZone();
+        } else {
+          // Regular permanent goes to graveyard
+          graveyard.push(battlefield.splice(idx - (cmdOnBattlefield ? 1 : 0), 1)[0].card);
+          render();
+        }
       });
+
+      if (isCmd) {
+        const cmdTag = document.createElement('span');
+        cmdTag.className = 'cmd-battlefield-tag';
+        cmdTag.textContent = 'Commander';
+        el.appendChild(cmdTag);
+      }
+
       bfZone._cards.appendChild(el);
     });
 

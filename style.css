@@ -1331,6 +1331,40 @@ select { cursor: pointer; }
   min-height: 20px;
 }
 
+.cmd-zone-card {
+  align-items: center;
+}
+
+.cmd-cast-btn {
+  margin-top: 4px;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  width: 100%;
+}
+
+.cmd-away-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.cmd-on-battlefield {
+  outline: 2px solid var(--gold);
+  border-radius: 6px;
+}
+
+.cmd-battlefield-tag {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--gold-light);
+  text-align: center;
+  margin-top: 2px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .playtest-card.selected {
   outline: 2px solid var(--gold);
   border-radius: 6px;
