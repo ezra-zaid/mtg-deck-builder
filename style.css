@@ -1215,17 +1215,22 @@ select { cursor: pointer; }
 }
 
 /* ===== LAND MODE SELECTOR ===== */
-.land-mode-group {
+.land-input-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+
+.land-input-row input {
+  width: 70px;
 }
 
 .land-mode-row {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
@@ -1238,10 +1243,13 @@ select { cursor: pointer; }
   background: var(--bg-hover);
 }
 
-.land-mode-row input[type="radio"] {
+.land-mode-row input[type="radio"],
+.land-mode-row input[type="checkbox"] {
   margin-top: 2px;
   flex-shrink: 0;
   accent-color: var(--gold);
+  width: 15px;
+  height: 15px;
 }
 
 .land-mode-desc {

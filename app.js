@@ -113,64 +113,99 @@ function showBuildDeckModal() {
   if (!state.commander) { showToast('Set a Commander first!', 'warn'); return; }
 
   const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:14px;';
   const title = h('h3', `Build Deck for ${state.commander.name}`);
 
-  // Land count
-  const countLabel = document.createElement('label');
-  countLabel.style.cssText = 'display:block;font-size:0.82rem;color:var(--text-secondary);margin:12px 0 4px;';
-  countLabel.textContent = 'Number of lands:';
-  const countIn = document.createElement('input');
-  countIn.type = 'number'; countIn.min = '20'; countIn.max = '50'; countIn.value = '37';
-  countIn.style.cssText = 'width:80px;margin-bottom:14px;';
+  // ── Total land count ──
+  const totalRow = document.createElement('div');
+  totalRow.className = 'land-input-row';
+  const totalLabel = document.createElement('span');
+  totalLabel.textContent = 'Total lands in deck:';
+  const totalIn = document.createElement('input');
+  totalIn.type = 'number'; totalIn.min = '0'; totalIn.max = '60'; totalIn.value = '37';
+  totalRow.append(totalLabel, totalIn);
 
-  // Land mode radio group
-  const modeLabel = document.createElement('p');
-  modeLabel.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);margin-bottom:8px;';
-  modeLabel.textContent = 'Land type:';
+  // ── Basic land count (slider + number) ──
+  const basicSection = document.createElement('div');
+  basicSection.className = 'land-mode-row';
+  basicSection.style.flexDirection = 'column';
+  basicSection.style.gap = '8px';
 
-  const modes = [
-    { value: 'basic',    label: 'Basic lands only',                desc: 'Plains, Islands, Swamps, etc. — reliable and budget-friendly' },
-    { value: 'nonbasic', label: 'Non-basic lands (EDHRec)',         desc: 'Command Tower, Fetch lands, Shocks — fill remaining slots with basics' },
-    { value: 'none',     label: 'No lands — I\'ll add them myself', desc: 'Skip lands entirely and manage manually' },
-  ];
+  const basicHeader = document.createElement('div');
+  basicHeader.style.cssText = 'display:flex;align-items:center;gap:10px;';
+  const basicLabel = document.createElement('strong');
+  basicLabel.textContent = 'Basic lands:';
+  const basicIn = document.createElement('input');
+  basicIn.type = 'number'; basicIn.min = '0'; basicIn.max = '60'; basicIn.value = '37';
+  basicIn.style.width = '64px';
+  const basicDesc = document.createElement('span');
+  basicDesc.className = 'land-mode-desc';
+  basicDesc.textContent = 'Plains, Islands, Swamps, Mountains, Forests';
+  basicHeader.append(basicLabel, basicIn, basicDesc);
 
-  let selectedMode = 'basic';
-  const radioWrap = document.createElement('div');
-  radioWrap.className = 'land-mode-group';
+  // Non-basic fill toggle
+  const specialRow = document.createElement('div');
+  specialRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:2px;';
+  const specialCheck = document.createElement('input');
+  specialCheck.type = 'checkbox'; specialCheck.id = 'special-lands-check'; specialCheck.checked = false;
+  const specialLabel = document.createElement('label');
+  specialLabel.htmlFor = 'special-lands-check';
+  specialLabel.style.cssText = 'font-size:0.82rem;cursor:pointer;';
+  specialLabel.innerHTML = 'Fill remaining <strong id="special-count">0</strong> land slot(s) with <strong>non-basic lands</strong> (Command Tower, fetch lands, shocks, etc. via EDHRec)';
+  specialRow.append(specialCheck, specialLabel);
 
-  modes.forEach(m => {
-    const row = document.createElement('label');
-    row.className = 'land-mode-row';
-    const radio = document.createElement('input');
-    radio.type = 'radio'; radio.name = 'land-mode'; radio.value = m.value;
-    if (m.value === 'basic') radio.checked = true;
-    radio.addEventListener('change', () => { selectedMode = m.value; });
-    const textWrap = document.createElement('span');
-    const strong = document.createElement('strong');
-    strong.textContent = m.label;
-    const desc = document.createElement('span');
-    desc.className = 'land-mode-desc';
-    desc.textContent = ' — ' + m.desc;
-    textWrap.append(strong, desc);
-    row.append(radio, textWrap);
-    radioWrap.appendChild(row);
+  basicSection.append(basicHeader, specialRow);
+
+  // Keep counts in sync: basics ≤ total, special count = total − basics
+  function syncCounts() {
+    const total = Math.max(0, Math.min(60, parseInt(totalIn.value) || 0));
+    const basics = Math.max(0, Math.min(total, parseInt(basicIn.value) || 0));
+    basicIn.value = basics;
+    const special = total - basics;
+    const countEl = document.getElementById('special-count');
+    if (countEl) countEl.textContent = special;
+    specialCheck.disabled = special === 0;
+    if (special === 0) specialCheck.checked = false;
+  }
+
+  totalIn.addEventListener('input', syncCounts);
+  basicIn.addEventListener('input', syncCounts);
+  syncCounts();
+
+  // ── No lands option ──
+  const noLandRow = document.createElement('label');
+  noLandRow.className = 'land-mode-row';
+  noLandRow.style.cssText = 'align-items:center;gap:8px;';
+  const noLandCheck = document.createElement('input');
+  noLandCheck.type = 'checkbox'; noLandCheck.id = 'no-land-check';
+  const noLandLabel = document.createElement('span');
+  noLandLabel.innerHTML = "<strong>Skip all lands</strong> <span class='land-mode-desc'>— I'll add them manually</span>";
+  noLandRow.append(noLandCheck, noLandLabel);
+
+  noLandCheck.addEventListener('change', () => {
+    totalIn.disabled = noLandCheck.checked;
+    basicIn.disabled = noLandCheck.checked;
+    specialCheck.disabled = noLandCheck.checked;
   });
 
+  // ── Build button ──
   const buildBtn = document.createElement('button');
   buildBtn.className = 'btn btn-gold tune-full-btn';
-  buildBtn.style.marginTop = '14px';
   buildBtn.textContent = 'Build Deck';
   buildBtn.addEventListener('click', () => {
-    const landCount = Math.max(0, Math.min(50, parseInt(countIn.value) || 37));
+    const skipLands = noLandCheck.checked;
+    const landCount  = skipLands ? 0 : Math.max(0, Math.min(60, parseInt(totalIn.value) || 37));
+    const basicCount = skipLands ? 0 : Math.max(0, Math.min(landCount, parseInt(basicIn.value) || landCount));
+    const fillSpecial = !skipLands && specialCheck.checked && (landCount - basicCount) > 0;
     hideModal();
-    buildDeck({ landMode: selectedMode, landCount });
+    buildDeck({ landCount, basicCount, fillSpecial });
   });
 
-  wrap.append(title, countLabel, countIn, modeLabel, radioWrap, buildBtn);
+  wrap.append(title, totalRow, basicSection, noLandRow, buildBtn);
   showModal(wrap);
 }
 
-async function buildDeck({ landMode = 'basic', landCount = 37 } = {}) {
+async function buildDeck({ landCount = 37, basicCount = 37, fillSpecial = false } = {}) {
   if (!state.commander) { showToast('Set a Commander first!', 'warn'); return; }
 
   const btn = document.getElementById('build-deck-btn');
@@ -179,38 +214,41 @@ async function buildDeck({ landMode = 'basic', landCount = 37 } = {}) {
   try {
     state.deck = {};
     const ci = state.commander.color_identity || [];
+    const spellCount = 99 - landCount;
 
     showToast('Fetching top-ranked cards...', 'info');
-    const spellCount = landMode === 'none' ? 99 : (99 - landCount);
     const q = `commander:"${state.commander.name}" -t:land`;
     const data = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent(q)}&order=edhrec&unique=cards`);
     const topCards = (data?.data || []).filter(c => c.id !== state.commander.id);
     topCards.filter(isColorLegal).slice(0, spellCount).forEach(card => { state.deck[card.id] = { card, qty: 1 }; });
 
-    if (landMode === 'basic') {
-      showToast('Adding basic lands...', 'info');
-      await addBasicLands(ci, landCount);
+    if (landCount === 0) {
+      // Skip all lands
+    } else if (fillSpecial) {
+      const specialCount = landCount - basicCount;
 
-    } else if (landMode === 'nonbasic') {
-      showToast('Fetching non-basic lands...', 'info');
+      // Fetch non-basic lands first
+      showToast(`Fetching ${specialCount} non-basic land(s)...`, 'info');
       const landQ = `commander:"${state.commander.name}" t:land -t:basic`;
       const landData = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent(landQ)}&order=edhrec&unique=cards`);
       const nonbasics = (landData?.data || []).filter(c => isColorLegal(c));
 
-      let nonbasicCount = 0;
+      let added = 0;
       for (const card of nonbasics) {
-        if (nonbasicCount >= landCount) break;
-        if (!state.deck[card.id]) { state.deck[card.id] = { card, qty: 1 }; nonbasicCount++; }
+        if (added >= specialCount) break;
+        if (!state.deck[card.id]) { state.deck[card.id] = { card, qty: 1 }; added++; }
       }
 
-      // Fill remaining land slots with basics
-      const basicNeeded = landCount - nonbasicCount;
-      if (basicNeeded > 0) {
-        showToast(`Adding ${basicNeeded} basic land(s)...`, 'info');
-        await addBasicLands(ci, basicNeeded);
+      // Add basics to fill the rest
+      if (basicCount > 0) {
+        showToast(`Adding ${basicCount} basic land(s)...`, 'info');
+        await addBasicLands(ci, basicCount);
       }
+    } else {
+      // Basics only
+      showToast(`Adding ${basicCount} basic land(s)...`, 'info');
+      await addBasicLands(ci, basicCount);
     }
-    // landMode === 'none': skip lands entirely
 
     updateDeckUI();
     showToast(`Deck built! ${deckTotal()} cards + ${state.commander.name}`, 'success');
@@ -1298,12 +1336,12 @@ async function applyStrategy(queryParts, swapCount) {
 
     if (!candidates.length) { showToast('No strategy cards found — try different keywords', 'warn'); return; }
 
-    // Make room if deck is full
+    // Make room if deck is full — never remove lands
     const remaining = deckLimit() - deckTotal();
     let removed = 0;
     if (remaining < candidates.length && swapCount > 0) {
       const toRemove = Object.values(state.deck)
-        .filter(({ card }) => !isBasicLand(card))
+        .filter(({ card }) => getType(card) !== 'Land')
         .sort((a, b) => (parseFloat(a.card.prices?.usd) || 0) - (parseFloat(b.card.prices?.usd) || 0))
         .slice(0, Math.min(swapCount, candidates.length));
       toRemove.forEach(({ card }) => { delete state.deck[card.id]; deckIds.delete(card.id); removed++; });
