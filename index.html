@@ -24,7 +24,8 @@
       <button class="btn" id="load-btn">Load</button>
       <button class="btn" id="export-btn">Export</button>
       <button class="btn" id="import-btn">Import</button>
-      <button class="btn btn-collection" id="collection-btn">My Collection</button>
+      <button class="btn btn-share" id="share-btn">Share</button>
+      <button class="btn btn-collection" id="collection-btn">Collection</button>
       <button class="btn btn-danger" id="clear-btn">Clear</button>
     </div>
   </header>
@@ -32,7 +33,7 @@
   <main class="app-main">
 
     <!-- Search Panel -->
-    <section class="panel search-panel">
+    <section class="panel search-panel" data-panel="search">
       <div class="search-bar">
         <input type="text" id="search-input" placeholder="Search for cards..." autocomplete="off">
         <button class="btn btn-gold" id="search-btn">Search</button>
@@ -72,7 +73,7 @@
     </section>
 
     <!-- Deck Panel -->
-    <section class="panel deck-panel">
+    <section class="panel deck-panel" data-panel="deck">
       <div class="deck-header">
         <h2>Deck</h2>
         <select id="deck-sort" title="Sort deck by">
@@ -88,7 +89,7 @@
     </section>
 
     <!-- Stats + Suggestions Panel -->
-    <section class="panel stats-panel">
+    <section class="panel stats-panel" data-panel="stats">
       <div class="stats-section">
         <h3>Stats</h3>
         <div class="stat-row"><span>Total Cards</span><span id="stat-total">0</span></div>
@@ -125,6 +126,13 @@
 
   </main>
 
+  <!-- Mobile Tab Bar -->
+  <nav class="mobile-tab-bar">
+    <button class="mobile-tab active" data-panel="search">Search</button>
+    <button class="mobile-tab" data-panel="deck">Deck</button>
+    <button class="mobile-tab" data-panel="stats">Stats</button>
+  </nav>
+
   <!-- Card Preview Tooltip -->
   <div id="card-preview" class="card-preview">
     <img id="preview-img" src="" alt="Card Preview">
@@ -133,7 +141,7 @@
   <!-- Modal -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">
-      <button class="modal-close" id="modal-close">x</button>
+      <button class="modal-close" id="modal-close">✕</button>
       <div id="modal-content"></div>
     </div>
   </div>

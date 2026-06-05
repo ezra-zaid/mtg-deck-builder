@@ -1419,54 +1419,79 @@ function shuffle(arr) {
 function showPlaytestModal() {
   if (!Object.keys(state.deck).length) { showToast('Add cards to the deck first', 'warn'); return; }
 
-  // Expand deck to individual cards (basic lands appear qty times)
   const allCards = [];
   Object.values(state.deck).forEach(({ card, qty }) => {
     for (let i = 0; i < qty; i++) allCards.push(card);
   });
 
-  let library = [];
-  let hand    = [];
-  let graveyard = [];
-  let turn = 0;
-  let mulliganSize = 7;
-  let viewingGY = false;
+  // Zone state
+  let library = [], hand = [], battlefield = [], graveyard = [], exile = [];
+  let turn = 0, mulliganSize = 7;
+  let selectedHandIdx = -1; // which hand card is selected for actions
+  let tokens = 0;
 
-  function deal(n) {
-    const drawn = library.splice(0, n);
-    hand.push(...drawn);
-  }
-
+  // ── Actions ──
   function newGame() {
     library = shuffle(allCards);
-    hand = []; graveyard = []; turn = 1; mulliganSize = 7; viewingGY = false;
-    deal(7);
+    hand = []; battlefield = []; graveyard = []; exile = [];
+    turn = 1; mulliganSize = 7; selectedHandIdx = -1; tokens = 0;
+    hand.push(...library.splice(0, 7));
     render();
   }
 
-  function drawOne() {
-    if (!library.length) { showToast('Library is empty!', 'warn'); return; }
+  function endTurn() {
+    // Untap all, draw one, advance turn
+    battlefield.forEach(b => { b.tapped = false; });
+    if (library.length) hand.push(...library.splice(0, 1));
     turn++;
-    deal(1);
+    selectedHandIdx = -1;
     render();
   }
 
   function doMulligan() {
     mulliganSize = Math.max(0, mulliganSize - 1);
     library = shuffle([...hand, ...library]);
-    hand = [];
-    deal(mulliganSize);
+    hand = []; selectedHandIdx = -1;
+    hand.push(...library.splice(0, mulliganSize));
     render();
   }
 
-  function discardFromHand(idx) {
-    graveyard.push(...hand.splice(idx, 1));
+  function playCard(idx) {
+    battlefield.push({ card: hand.splice(idx, 1)[0], tapped: false });
+    selectedHandIdx = -1;
     render();
   }
 
-  // ── Build modal shell ──
-  const wrap = document.createElement('div');
-  wrap.className = 'playtest-wrap';
+  function discardCard(idx) {
+    graveyard.push(hand.splice(idx, 1)[0]);
+    selectedHandIdx = -1;
+    render();
+  }
+
+  function exileCard(idx) {
+    exile.push(hand.splice(idx, 1)[0]);
+    selectedHandIdx = -1;
+    render();
+  }
+
+  // ── Modal DOM shell ──
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.remove('hidden');
+  overlay.classList.add('playtest-fullscreen');
+  const modalEl = overlay.querySelector('.modal');
+  modalEl.classList.add('modal-playtest');
+  const contentEl = document.getElementById('modal-content');
+  contentEl.innerHTML = '';
+
+  // cleanup on close
+  const origClose = () => {
+    overlay.classList.remove('playtest-fullscreen');
+    modalEl.classList.remove('modal-playtest');
+  };
+  document.getElementById('modal-close').addEventListener('click', origClose, { once: true });
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) origClose();
+  }, { once: true });
 
   // Top bar
   const topBar = document.createElement('div');
@@ -1481,47 +1506,95 @@ function showPlaytestModal() {
   mulliganBtn.className = 'btn btn-xs';
   mulliganBtn.addEventListener('click', doMulligan);
 
-  const drawBtn = document.createElement('button');
-  drawBtn.className = 'btn btn-xs';
-  drawBtn.textContent = 'Draw';
-  drawBtn.addEventListener('click', drawOne);
+  const endTurnBtn = document.createElement('button');
+  endTurnBtn.className = 'btn btn-xs btn-playtest';
+  endTurnBtn.textContent = 'End Turn / Draw';
+  endTurnBtn.addEventListener('click', endTurn);
 
-  const turnBadge   = document.createElement('span');
-  const libraryBadge = document.createElement('span');
-  const gyBtn = document.createElement('button');
-  gyBtn.className = 'btn btn-xs';
-  gyBtn.addEventListener('click', () => { viewingGY = !viewingGY; render(); });
+  const turnBadge = document.createElement('span');
+  const libBadge  = document.createElement('span');
 
-  topBar.append(newGameBtn, mulliganBtn, drawBtn, turnBadge, libraryBadge, gyBtn);
+  // Token counter
+  const tokenWrap = document.createElement('span');
+  tokenWrap.className = 'playtest-badge';
+  tokenWrap.style.display = 'flex';
+  tokenWrap.style.gap = '4px';
+  tokenWrap.style.alignItems = 'center';
+  const tokenMinus = document.createElement('button');
+  tokenMinus.className = 'btn btn-xs';
+  tokenMinus.textContent = '−';
+  tokenMinus.addEventListener('click', () => { tokens = Math.max(0, tokens - 1); renderBadges(); });
+  const tokenLabel = document.createElement('span');
+  const tokenPlus = document.createElement('button');
+  tokenPlus.className = 'btn btn-xs';
+  tokenPlus.textContent = '+';
+  tokenPlus.addEventListener('click', () => { tokens++; renderBadges(); });
+  tokenWrap.append(tokenMinus, tokenLabel, tokenPlus);
 
-  // Commander strip
+  topBar.append(newGameBtn, mulliganBtn, endTurnBtn, turnBadge, libBadge, tokenWrap);
+
+  // Commander zone
   const cmdStrip = document.createElement('div');
   cmdStrip.className = 'playtest-cmd';
 
-  // Hand / GY area
-  const cardArea = document.createElement('div');
-  cardArea.className = 'playtest-area';
+  // Zones
+  const bfZone  = makeZone('Battlefield', 'battlefield-zone');
+  const handZone = makeZone('Hand', 'hand-zone');
+  const gyZone  = makeZone('Graveyard', 'gy-zone');
+  const exZone  = makeZone('Exile', 'ex-zone');
 
-  const areaLabel = document.createElement('div');
-  areaLabel.className = 'playtest-area-label';
+  function makeZone(label, cls) {
+    const z = document.createElement('div');
+    z.className = `playtest-zone ${cls}`;
+    const lbl = document.createElement('div');
+    lbl.className = 'playtest-zone-label';
+    lbl.textContent = label;
+    const cards = document.createElement('div');
+    cards.className = 'playtest-cards';
+    z.append(lbl, cards);
+    z._label = lbl;
+    z._cards = cards;
+    return z;
+  }
 
-  const cardRow = document.createElement('div');
-  cardRow.className = 'playtest-cards';
+  const bottomRow = document.createElement('div');
+  bottomRow.className = 'playtest-bottom';
+  bottomRow.append(gyZone, exZone);
 
-  cardArea.append(areaLabel, cardRow);
+  contentEl.append(topBar, cmdStrip, bfZone, handZone, bottomRow);
 
-  wrap.append(topBar, cmdStrip, cardArea);
-  showModal(wrap);
-
-  function render() {
-    // Top bar badges
+  // ── Render ──
+  function renderBadges() {
     mulliganBtn.textContent = `Mulligan → ${mulliganSize - 1}`;
     mulliganBtn.disabled = turn > 1;
     turnBadge.className = 'playtest-badge';
     turnBadge.textContent = `Turn ${turn}`;
-    libraryBadge.className = 'playtest-badge';
-    libraryBadge.textContent = `Library: ${library.length}`;
-    gyBtn.textContent = `Graveyard: ${graveyard.length}`;
+    libBadge.className = 'playtest-badge';
+    libBadge.textContent = `Library: ${library.length}`;
+    tokenLabel.textContent = `Tokens: ${tokens}`;
+  }
+
+  function makeThumb(card, onClick, extraClass = '') {
+    const el = document.createElement('div');
+    el.className = `playtest-card ${extraClass}`;
+    const img = document.createElement('img');
+    img.className = 'playtest-thumb';
+    img.src = getImage(card, 'small') || '';
+    img.alt = card.name;
+    img.loading = 'lazy';
+    const nm = document.createElement('span');
+    nm.className = 'playtest-card-name';
+    nm.textContent = card.name;
+    el.append(img, nm);
+    if (onClick) el.addEventListener('click', onClick);
+    el.addEventListener('mouseenter', e => showPreview(card, e));
+    el.addEventListener('mouseleave', hidePreview);
+    el.addEventListener('mousemove', movePreview);
+    return el;
+  }
+
+  function render() {
+    renderBadges();
 
     // Commander
     cmdStrip.innerHTML = '';
@@ -1529,57 +1602,79 @@ function showPlaytestModal() {
       const cmdLabel = document.createElement('span');
       cmdLabel.className = 'playtest-zone-label';
       cmdLabel.textContent = 'Command Zone:';
-      const cmdThumb = document.createElement('img');
-      cmdThumb.className = 'playtest-thumb';
-      cmdThumb.src = getImage(state.commander, 'small') || '';
-      cmdThumb.alt = state.commander.name;
-      cmdThumb.title = state.commander.name;
-      cmdThumb.addEventListener('mouseenter', e => showPreview(state.commander, e));
-      cmdThumb.addEventListener('mouseleave', hidePreview);
-      cmdThumb.addEventListener('mousemove', movePreview);
-      cmdStrip.append(cmdLabel, cmdThumb);
+      const t = makeThumb(state.commander, null);
+      cmdStrip.append(cmdLabel, t);
     }
 
-    // Cards
-    const display = viewingGY ? graveyard : hand;
-    areaLabel.textContent = viewingGY
-      ? `Graveyard — ${graveyard.length} card(s)  (click to return to hand)`
-      : `Hand — ${hand.length} card(s)  (click a card to discard)`;
-
-    cardRow.innerHTML = '';
-    if (!display.length) {
-      const empty = document.createElement('span');
-      empty.style.cssText = 'color:var(--text-secondary);font-size:0.82rem;padding:8px;';
-      empty.textContent = viewingGY ? 'Graveyard is empty.' : 'Hand is empty.';
-      cardRow.appendChild(empty);
-    } else {
-      display.forEach((card, idx) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'playtest-card';
-        wrap.title = viewingGY ? `Return ${card.name} to hand` : `Discard ${card.name}`;
-
-        const img = document.createElement('img');
-        img.className = 'playtest-thumb';
-        img.src = getImage(card, 'small') || '';
-        img.alt = card.name;
-        img.loading = 'lazy';
-
-        const nameLbl = document.createElement('span');
-        nameLbl.className = 'playtest-card-name';
-        nameLbl.textContent = card.name;
-
-        wrap.append(img, nameLbl);
-        wrap.addEventListener('click', () => {
-          if (viewingGY) { hand.push(...graveyard.splice(idx, 1)); }
-          else { discardFromHand(idx); }
-          render();
-        });
-        wrap.addEventListener('mouseenter', e => showPreview(card, e));
-        wrap.addEventListener('mouseleave', hidePreview);
-        wrap.addEventListener('mousemove', movePreview);
-        cardRow.appendChild(wrap);
+    // Battlefield
+    bfZone._label.textContent = `Battlefield — ${battlefield.length} permanent(s)  ·  click to tap/untap  ·  double-click to sacrifice`;
+    bfZone._cards.innerHTML = '';
+    battlefield.forEach((entry, idx) => {
+      const el = makeThumb(entry.card, () => {
+        entry.tapped = !entry.tapped;
+        el.classList.toggle('tapped', entry.tapped);
+      }, entry.tapped ? 'tapped' : '');
+      el.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        graveyard.push(battlefield.splice(idx, 1)[0].card);
+        render();
       });
-    }
+      bfZone._cards.appendChild(el);
+    });
+
+    // Hand
+    handZone._label.textContent = `Hand — ${hand.length} card(s)  ·  click to select, then choose action`;
+    handZone._cards.innerHTML = '';
+
+    hand.forEach((card, idx) => {
+      const isSelected = idx === selectedHandIdx;
+      const el = makeThumb(card, () => {
+        selectedHandIdx = isSelected ? -1 : idx;
+        render();
+      }, isSelected ? 'selected' : '');
+
+      if (isSelected) {
+        // Action buttons overlay
+        const actions = document.createElement('div');
+        actions.className = 'hand-card-actions';
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-xs btn-gold';
+        playBtn.textContent = 'Play';
+        playBtn.addEventListener('click', e => { e.stopPropagation(); playCard(idx); });
+
+        const discBtn = document.createElement('button');
+        discBtn.className = 'btn btn-xs';
+        discBtn.textContent = 'Discard';
+        discBtn.addEventListener('click', e => { e.stopPropagation(); discardCard(idx); });
+
+        const exBtn = document.createElement('button');
+        exBtn.className = 'btn btn-xs';
+        exBtn.textContent = 'Exile';
+        exBtn.addEventListener('click', e => { e.stopPropagation(); exileCard(idx); });
+
+        actions.append(playBtn, discBtn, exBtn);
+        el.appendChild(actions);
+      }
+
+      handZone._cards.appendChild(el);
+    });
+
+    // Graveyard
+    gyZone._label.textContent = `Graveyard (${graveyard.length})  ·  click to return to hand`;
+    gyZone._cards.innerHTML = '';
+    graveyard.slice().reverse().forEach((card, ri) => {
+      const idx = graveyard.length - 1 - ri;
+      gyZone._cards.appendChild(makeThumb(card, () => {
+        hand.push(graveyard.splice(idx, 1)[0]);
+        render();
+      }));
+    });
+
+    // Exile
+    exZone._label.textContent = `Exile (${exile.length})`;
+    exZone._cards.innerHTML = '';
+    exile.forEach(card => exZone._cards.appendChild(makeThumb(card, null)));
   }
 
   newGame();
@@ -2110,22 +2205,8 @@ function setupEvents() {
     showModal(wrap);
   });
 
-  document.getElementById('import-btn').addEventListener('click', () => {
-    const wrap = document.createElement('div');
-    const title = document.createElement('h3');
-    title.textContent = 'Import Deck';
-    const hint = document.createElement('p');
-    hint.textContent = 'Paste your deck list — one card per line: "4 Lightning Bolt" or "1x Sol Ring"';
-    const ta = document.createElement('textarea');
-    ta.className = 'export-textarea';
-    ta.placeholder = '1 Sol Ring\n4 Lightning Bolt\n24 Mountain\n...';
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-gold';
-    btn.textContent = 'Import';
-    btn.addEventListener('click', () => { hideModal(); importText(ta.value); });
-    wrap.append(title, hint, ta, btn);
-    showModal(wrap);
-  });
+  document.getElementById('import-btn').addEventListener('click', showImportModal);
+  document.getElementById('share-btn').addEventListener('click', showShareModal);
 
   document.getElementById('clear-btn').addEventListener('click', () => {
     if (!confirm('Clear the entire deck?')) return;
@@ -2201,10 +2282,272 @@ function setupEvents() {
   });
 }
 
+// ==================== SHAREABLE LINKS ====================
+function generateShareURL() {
+  const data = {
+    name: state.deckName,
+    format: state.format,
+    notes: state.deckNotes,
+    commander: state.commander ? state.commander.name : null,
+    cards: Object.values(state.deck).map(({ card, qty }) => ({ name: card.name, qty })),
+  };
+  const hash = '#share=' + btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  return window.location.origin + window.location.pathname + hash;
+}
+
+async function loadFromShareURL() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#share=')) return false;
+  try {
+    const json = decodeURIComponent(escape(atob(hash.slice(7))));
+    const data = JSON.parse(json);
+
+    showToast('Loading shared deck…', 'info');
+
+    // Batch-fetch cards from Scryfall /cards/collection (max 75 per request)
+    const identifiers = data.cards.map(c => ({ name: c.name }));
+    if (data.commander) identifiers.push({ name: data.commander });
+
+    const fetched = {};
+    for (let i = 0; i < identifiers.length; i += 75) {
+      const batch = identifiers.slice(i, i + 75);
+      const res = await fetch(`${SCRYFALL}/cards/collection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiers: batch }),
+      });
+      const json2 = await res.json();
+      (json2.data || []).forEach(c => { fetched[c.name.toLowerCase()] = c; });
+      if (i + 75 < identifiers.length) await delay(100);
+    }
+
+    state.deck = {};
+    state.format = data.format || 'commander';
+    state.deckName = data.name || 'Shared Deck';
+    state.deckNotes = data.notes || '';
+    state.commander = data.commander ? (fetched[data.commander.toLowerCase()] || null) : null;
+
+    data.cards.forEach(({ name, qty }) => {
+      const card = fetched[name.toLowerCase()];
+      if (card) state.deck[card.id] = { card, qty };
+    });
+
+    document.getElementById('format-select').value = state.format;
+    document.getElementById('deck-name-input').value = state.deckName;
+    const notesEl = document.getElementById('deck-notes');
+    if (notesEl) notesEl.value = state.deckNotes;
+
+    history.replaceState(null, '', window.location.pathname); // clear hash
+    updateDeckUI();
+    showToast(`Loaded "${state.deckName}" (${Object.keys(state.deck).length} cards)`, 'success');
+    return true;
+  } catch (e) {
+    console.error('Share URL parse failed', e);
+    showToast('Could not load shared deck', 'error');
+    return false;
+  }
+}
+
+function showShareModal() {
+  if (!Object.keys(state.deck).length) { showToast('Add cards to the deck first', 'warn'); return; }
+  const url = generateShareURL();
+  const wrap = document.createElement('div');
+  const title = h('h3', 'Share Deck');
+  const desc = document.createElement('p');
+  desc.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);margin-bottom:10px;';
+  desc.textContent = 'Anyone with this link can open your exact deck — no account needed.';
+
+  const urlBox = document.createElement('input');
+  urlBox.type = 'text';
+  urlBox.value = url;
+  urlBox.readOnly = true;
+  urlBox.style.cssText = 'width:100%;margin-bottom:10px;font-size:0.75rem;';
+  urlBox.addEventListener('click', () => urlBox.select());
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'btn btn-gold tune-full-btn';
+  copyBtn.textContent = 'Copy Link';
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(url).then(() => {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { copyBtn.textContent = 'Copy Link'; }, 2000);
+    });
+  });
+
+  wrap.append(title, desc, urlBox, copyBtn);
+  showModal(wrap);
+}
+
+// ==================== IMPORT FROM URL ====================
+async function importFromURL(rawUrl) {
+  const url = rawUrl.trim();
+
+  // Archidekt: https://archidekt.com/decks/12345/...
+  const archiMatch = url.match(/archidekt\.com\/decks\/(\d+)/);
+  if (archiMatch) {
+    return importArchidekt(archiMatch[1]);
+  }
+
+  // Moxfield: https://www.moxfield.com/decks/SLUG
+  const moxMatch = url.match(/moxfield\.com\/decks\/([\w-]+)/);
+  if (moxMatch) {
+    return importMoxfield(moxMatch[1]);
+  }
+
+  showToast('Unrecognized URL — paste deck text below instead', 'warn');
+  return false;
+}
+
+async function importArchidekt(deckId) {
+  try {
+    showToast('Fetching from Archidekt…', 'info');
+    const res = await fetch(`https://archidekt.com/api/decks/${deckId}/small/`);
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+
+    const lines = [];
+    let commanderName = null;
+
+    (data.cards || []).forEach(entry => {
+      const name = entry.card?.oracleCard?.name || entry.card?.name;
+      const qty  = entry.quantity || 1;
+      const cats = (entry.categories || []).map(c => (typeof c === 'string' ? c : c.name || '').toLowerCase());
+      if (!name) return;
+      if (cats.includes('commander')) { commanderName = name; return; }
+      if (cats.includes('maybeboard') || cats.includes('sideboard')) return;
+      lines.push(`${qty} ${name}`);
+    });
+
+    if (commanderName) lines.unshift(`// Commander: ${commanderName}`);
+    if (data.name) state.deckName = data.name;
+
+    await importText(lines.join('\n'));
+    showToast(`Imported "${data.name || 'Archidekt deck'}"`, 'success');
+    return true;
+  } catch (e) {
+    showToast('Archidekt import failed — try pasting the deck list', 'error');
+    console.error(e);
+    return false;
+  }
+}
+
+async function importMoxfield(deckSlug) {
+  try {
+    showToast('Fetching from Moxfield…', 'info');
+    // Moxfield public API
+    const res = await fetch(`https://api2.moxfield.com/v3/decks/all/${deckSlug}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+
+    const lines = [];
+    const sections = ['mainboard', 'commanders', 'companions'];
+
+    sections.forEach(section => {
+      const cards = data[section] || {};
+      Object.entries(cards).forEach(([, entry]) => {
+        const name = entry.card?.name;
+        const qty  = entry.quantity || 1;
+        if (!name) return;
+        if (section === 'commanders') lines.unshift(`// Commander: ${name}`);
+        else lines.push(`${qty} ${name}`);
+      });
+    });
+
+    if (data.name) state.deckName = data.name;
+    await importText(lines.join('\n'));
+    showToast(`Imported "${data.name || 'Moxfield deck'}"`, 'success');
+    return true;
+  } catch (e) {
+    showToast('Moxfield import failed — try pasting the deck text instead', 'warn');
+    console.error(e);
+    return false;
+  }
+}
+
+function showImportModal() {
+  const wrap = document.createElement('div');
+  const title = h('h3', 'Import Deck');
+
+  // URL section
+  const urlLabel = document.createElement('p');
+  urlLabel.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);margin:8px 0 4px;';
+  urlLabel.textContent = 'Paste an Archidekt or Moxfield deck URL:';
+
+  const urlRow = document.createElement('div');
+  urlRow.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;';
+  const urlIn = document.createElement('input');
+  urlIn.type = 'text';
+  urlIn.placeholder = 'https://archidekt.com/decks/12345/...';
+  urlIn.style.flex = '1';
+  const urlBtn = document.createElement('button');
+  urlBtn.className = 'btn btn-gold';
+  urlBtn.textContent = 'Import URL';
+  urlBtn.addEventListener('click', async () => {
+    if (!urlIn.value.trim()) return;
+    hideModal();
+    await importFromURL(urlIn.value);
+  });
+  urlRow.append(urlIn, urlBtn);
+
+  // Divider
+  const div = document.createElement('p');
+  div.style.cssText = 'text-align:center;font-size:0.78rem;color:var(--text-secondary);margin-bottom:10px;';
+  div.textContent = '— or paste a deck list —';
+
+  // Text section
+  const hint = document.createElement('p');
+  hint.style.cssText = 'font-size:0.78rem;color:var(--text-secondary);margin-bottom:6px;';
+  hint.innerHTML = 'One card per line: <code>4 Lightning Bolt</code>  ·  Works with MTGO, Arena, and most export formats';
+
+  const ta = document.createElement('textarea');
+  ta.className = 'export-textarea';
+  ta.placeholder = '1 Sol Ring\n4 Lightning Bolt\n24 Mountain\n...';
+
+  const textBtn = document.createElement('button');
+  textBtn.className = 'btn btn-gold tune-full-btn';
+  textBtn.textContent = 'Import List';
+  textBtn.addEventListener('click', () => { hideModal(); importText(ta.value); });
+
+  // Moxfield note
+  const moxNote = document.createElement('p');
+  moxNote.style.cssText = 'font-size:0.72rem;color:var(--text-secondary);margin-top:10px;';
+  moxNote.textContent = 'Tip: For Moxfield, try the URL above. If it fails (CORS), use Export → MTGO in Moxfield and paste the text.';
+
+  wrap.append(title, urlLabel, urlRow, div, hint, ta, textBtn, moxNote);
+  showModal(wrap);
+}
+
+// ==================== MOBILE TABS ====================
+function initMobileTabs() {
+  const tabs = document.querySelectorAll('.mobile-tab');
+  const panels = document.querySelectorAll('.panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.panel;
+      panels.forEach(p => {
+        p.classList.toggle('panel-active', p.dataset.panel === target);
+      });
+    });
+  });
+  // Activate first tab by default
+  if (tabs.length) tabs[0].click();
+}
+
 // ==================== INIT ====================
 function init() {
   setupEvents();
   loadCollection();
+  initMobileTabs();
+
+  // Check for shared deck in URL hash first
+  if (window.location.hash.startsWith('#share=')) {
+    loadFromShareURL();
+    return;
+  }
 
   const names = savedDeckNames();
   if (names.length) {

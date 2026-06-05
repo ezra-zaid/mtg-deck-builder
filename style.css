@@ -1167,3 +1167,209 @@ select { cursor: pointer; }
   background: #8a6800;
   border-color: var(--gold-light);
 }
+
+/* ===== SHARE BUTTON ===== */
+.btn-share {
+  background: #1e3a5f;
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  font-weight: 600;
+}
+.btn-share:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+/* ===== PLAYTEST FULL-SCREEN MODAL ===== */
+.playtest-fullscreen {
+  align-items: stretch !important;
+  padding: 0 !important;
+}
+
+.modal-playtest {
+  max-width: 100% !important;
+  width: 100% !important;
+  max-height: 100vh !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-playtest #modal-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 14px;
+}
+
+.playtest-zone {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  flex-shrink: 0;
+}
+
+.battlefield-zone {
+  min-height: 120px;
+  flex: 1;
+}
+
+.hand-zone {
+  min-height: 100px;
+}
+
+.playtest-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gy-zone, .ex-zone {
+  min-height: 80px;
+}
+
+.playtest-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  min-height: 20px;
+}
+
+.playtest-card.selected {
+  outline: 2px solid var(--gold);
+  border-radius: 6px;
+}
+
+.playtest-card.tapped {
+  transform: rotate(90deg);
+  transform-origin: center center;
+  margin: 10px 4px;
+}
+
+.hand-card-actions {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.hand-card-actions .btn {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+}
+
+/* ===== MOBILE LAYOUT ===== */
+.mobile-tab-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .header-left h1 {
+    font-size: 1rem;
+  }
+
+  .header-right {
+    gap: 5px;
+  }
+
+  .header-right .btn {
+    font-size: 0.72rem;
+    padding: 4px 7px;
+  }
+
+  #deck-name-input {
+    width: 100px;
+  }
+
+  .app-main {
+    display: block;
+    overflow: visible;
+    height: auto;
+  }
+
+  .panel {
+    display: none;
+    overflow-y: visible;
+    height: auto;
+    min-height: 80vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel.panel-active {
+    display: block;
+  }
+
+  .mobile-tab-bar {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: 100;
+    background: var(--bg-secondary);
+    border-top: 2px solid var(--gold);
+  }
+
+  .mobile-tab {
+    flex: 1;
+    padding: 10px 4px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .mobile-tab.active {
+    color: var(--gold-light);
+    background: var(--bg-hover);
+    border-top: 2px solid var(--gold);
+  }
+
+  .mobile-tab:hover:not(.active) {
+    color: var(--text-primary);
+    background: var(--bg-card);
+  }
+
+  /* Playtest takes full screen on mobile too */
+  .modal-playtest {
+    height: 100dvh !important;
+  }
+
+  .playtest-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stack stat actions in one column on mobile */
+  .stat-actions {
+    grid-template-columns: 1fr;
+  }
+
+  /* Buy list rows stack nicely */
+  .buy-row {
+    flex-wrap: wrap;
+  }
+
+  /* Collection controls wrap */
+  .coll-controls {
+    flex-direction: column;
+  }
+}
