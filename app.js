@@ -1163,21 +1163,54 @@ const STRATEGIES = {
   'Sacrifice':       '(o:sacrifice OR o:"whenever a creature dies")',
   'Tribal Synergy':  '(o:"other" o:"get +"  OR o:"of the same type")',
   'Protection':      '(keyword:hexproof OR keyword:indestructible OR o:"protection from")',
+  'Mill':            '(o:mill OR o:"put the top" o:"into their graveyard" OR o:"opponent mills")',
+  'Life Gain':       '(o:"gain" o:"life" OR keyword:lifelink OR o:"you gain" o:"life")',
+  'Burn':            '(o:"deals" o:"damage to any target" OR o:"damage to each opponent" OR o:"damage to each player")',
+  'Control':         '(o:"counter target" OR o:"return" o:"to its owner" o:"hand" OR o:"tap all")',
+  'Voltron':         '(o:equip OR o:"enchant creature" OR o:"attach" o:"to target creature")',
+  'Proliferate':     '(o:proliferate OR keyword:proliferate)',
+  'Storm / Spells':  '(keyword:storm OR o:"copy of the spell" OR o:"copies of it" OR o:"whenever you cast an instant or sorcery")',
+  'Extra Turns':     '(o:"extra turn" OR o:"additional turn")',
+  'Landfall':        '(o:landfall OR o:"whenever a land enters the battlefield" OR o:"whenever you play a land")',
+  'Blink / Flicker': '(o:"exile" o:"then return" OR o:"flicker" OR o:"phase out")',
 };
 
 function descriptionToQueryParts(text) {
-  const t = text.toLowerCase();
+  if (!text) return [];
+  const t = text.toLowerCase().trim();
   const parts = [];
-  if (/aggro|attack|combat|haste|fast|offensive/.test(t))    parts.push(STRATEGIES['Aggressive']);
-  if (/token|swarm|wide|many|army|flood/.test(t))            parts.push(STRATEGIES['Tokens / Swarm']);
-  if (/draw|card advantage|cantrip|refill/.test(t))          parts.push(STRATEGIES['Card Draw']);
-  if (/removal|destroy|exile|kill|wipe|board/.test(t))       parts.push(STRATEGIES['Removal']);
-  if (/ramp|mana|accelerat|land|resource/.test(t))           parts.push(STRATEGIES['Ramp / Mana']);
-  if (/grave|reanimat|recursion|death|return/.test(t))       parts.push(STRATEGIES['Graveyard']);
-  if (/counter|buff|pump|\+1|grow/.test(t))                  parts.push(STRATEGIES['+1/+1 Counters']);
-  if (/sacrifi|sac|drain|aristocrat|die/.test(t))            parts.push(STRATEGIES['Sacrifice']);
-  if (/tribal|creature type|goblin|elf|human/.test(t))       parts.push(STRATEGIES['Tribal Synergy']);
-  if (/protect|hexproof|indestructible|safe/.test(t))        parts.push(STRATEGIES['Protection']);
+  const add = name => { if (STRATEGIES[name] && !parts.includes(STRATEGIES[name])) parts.push(STRATEGIES[name]); };
+
+  if (/\baggro\b|attack|combat|haste|offensive|beatdown/.test(t))          add('Aggressive');
+  if (/token|swarm|wide|army|flood|populate/.test(t))                      add('Tokens / Swarm');
+  if (/\bdraw\b|card advantage|cantrip|refill|hand size/.test(t))          add('Card Draw');
+  if (/remov|destroy|exile|\bkill\b|wipe|board clear|sweep/.test(t))       add('Removal');
+  if (/\bramp\b|mana acceler|land ramp|land search|resource/.test(t))      add('Ramp / Mana');
+  if (/grave|reanimat|recursion|flashback|return from|dredge/.test(t))     add('Graveyard');
+  if (/\+1\/\+1|\bcounter\b|proliferate|\bgrow\b|\bpump\b|buff/.test(t))  add('+1/+1 Counters');
+  if (/sacrifi|\bsac\b|aristocrat|\bdie\b|\bdies\b|drain|blood/.test(t))   add('Sacrifice');
+  if (/tribal|creature type|goblin|elf|human|vampire|zombie|dragon/.test(t)) add('Tribal Synergy');
+  if (/protect|hexproof|indestructible|shroud|shield/.test(t))             add('Protection');
+  if (/\bmill\b|milling|mill card|deck out|library into/.test(t))          add('Mill');
+  if (/life gain|lifegain|gain life|lifelink|drain life|\blife\b/.test(t)) add('Life Gain');
+  if (/\bburn\b|direct damage|shock|lightning|fireball|damage to/.test(t)) add('Burn');
+  if (/\bcontrol\b|counterspell|counter spell|permission|bounce/.test(t))  add('Control');
+  if (/voltron|equip|aura|enchant creature|\bweapon\b|attach/.test(t))     add('Voltron');
+  if (/\bproliferate\b/.test(t))                                            add('Proliferate');
+  if (/\bstorm\b|spellslinger|spell copy|instant.*sorcery|cantrip/.test(t)) add('Storm / Spells');
+  if (/extra turn|additional turn|time walk|take another turn/.test(t))    add('Extra Turns');
+  if (/landfall|whenever.*land|play.*land|land drop/.test(t))              add('Landfall');
+  if (/blink|flicker|phase out|exile.*return/.test(t))                     add('Blink / Flicker');
+
+  // Fallback: if nothing matched a preset, use each word as a raw oracle-text search
+  // This handles any keyword: "cascade", "dredge", "convoke", "populate", etc.
+  if (!parts.length) {
+    const words = t.split(/\W+/).filter(w => w.length > 2);
+    if (words.length) {
+      parts.push(`(${words.map(w => `o:${w}`).join(' OR ')})`);
+    }
+  }
+
   return parts;
 }
 
@@ -1215,7 +1248,7 @@ function showTuneDeckModal() {
 
   // ── Section 2: Strategy ──
   const s1 = h('h3', 'Strategy Focus');
-  const s2 = h('p', 'Click strategies or describe your goal — the deck will be tuned toward those themes.');
+  const s2 = h('p', 'Click a strategy chip or type any theme — even custom keywords like "cascade" or "landfall" will work.');
 
   const chipWrap = document.createElement('div');
   chipWrap.className = 'strategy-presets';
@@ -1236,7 +1269,7 @@ function showTuneDeckModal() {
   descLabel.style.cssText = 'display:block;font-size:0.82rem;color:var(--text-secondary);margin:12px 0 5px;';
   const descIn = document.createElement('input');
   descIn.type = 'text';
-  descIn.placeholder = 'e.g. attack heavy, plays well with goblins, go wide...';
+  descIn.placeholder = 'e.g. Mill, Burn, Voltron, Cascade, Landfall, Blink...';
   descIn.style.width = '100%';
 
   const swapLabel = lbl('Cards to swap if deck is full:');
