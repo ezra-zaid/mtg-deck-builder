@@ -1782,7 +1782,9 @@ function showPlaytestModal() {
     const bfDisplay = [...battlefield];
     if (cmdOnBattlefield) bfDisplay.unshift({ card: state.commander, tapped: false, isCommander: true });
 
-    bfZone._label.textContent = `Battlefield — ${bfDisplay.length} permanent(s)  ·  click to tap/untap  ·  double-click to remove`;
+    const isTouch = window.matchMedia('(hover: none)').matches;
+    const bfHint = isTouch ? 'tap to tap/untap  ·  × to remove' : 'click to tap/untap  ·  double-click or × to remove';
+    bfZone._label.textContent = `Battlefield — ${bfDisplay.length} permanent(s)  ·  ${bfHint}`;
     bfZone._cards.innerHTML = '';
     bfDisplay.forEach((entry, idx) => {
       const isCmd = entry.isCommander;
@@ -1791,17 +1793,32 @@ function showPlaytestModal() {
         el.classList.toggle('tapped', entry.tapped);
       }, (entry.tapped ? 'tapped ' : '') + (isCmd ? 'cmd-on-battlefield' : ''));
 
+      // Desktop: double-click to remove
       el.addEventListener('dblclick', e => {
         e.stopPropagation();
         if (isCmd) {
-          // Commander goes back to command zone
           returnCmdToZone();
         } else {
-          // Regular permanent goes to graveyard
           graveyard.push(battlefield.splice(idx - (cmdOnBattlefield ? 1 : 0), 1)[0].card);
           render();
         }
       });
+
+      // Remove button (hover-to-show on desktop, always visible on touch)
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'bf-remove-btn';
+      removeBtn.textContent = '×';
+      removeBtn.title = isCmd ? 'Return to Command Zone' : 'Send to Graveyard';
+      removeBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (isCmd) {
+          returnCmdToZone();
+        } else {
+          graveyard.push(battlefield.splice(idx - (cmdOnBattlefield ? 1 : 0), 1)[0].card);
+          render();
+        }
+      });
+      el.appendChild(removeBtn);
 
       if (isCmd) {
         const cmdTag = document.createElement('span');
@@ -2109,6 +2126,7 @@ function updateDeckUI() {
 let previewTimer;
 
 function showPreview(card, e) {
+  if (window.matchMedia('(hover: none)').matches) return;
   clearTimeout(previewTimer);
   const img = document.getElementById('preview-img');
   const src = getImage(card, 'normal');
