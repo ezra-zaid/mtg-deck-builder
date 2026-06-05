@@ -1909,24 +1909,47 @@ function renderDeck() {
     cmdRow.addEventListener('mouseleave', hidePreview);
     cmdRow.addEventListener('mousemove', movePreview);
 
+    // ── Auto-Build (primary action) ──
+    const buildWrap = document.createElement('div');
+    buildWrap.className = 'cmd-action-primary';
+
     const buildBtn = document.createElement('button');
     buildBtn.id = 'build-deck-btn';
-    buildBtn.className = 'btn btn-gold';
-    buildBtn.style.cssText = 'width:100%;margin-top:8px;font-size:0.82rem;';
-    buildBtn.textContent = 'Auto-Build Deck';
+    buildBtn.className = 'btn btn-gold cmd-action-btn';
+    buildBtn.textContent = '✦ Auto-Build Full Deck';
     buildBtn.addEventListener('click', showBuildDeckModal);
+
+    const buildDesc = document.createElement('p');
+    buildDesc.className = 'cmd-action-desc';
+    buildDesc.textContent = 'Clears the deck and builds 99 cards from scratch using EDHRec synergy for your commander.';
+
+    buildWrap.append(buildBtn, buildDesc);
+
+    // ── Divider ──
+    const divider = document.createElement('div');
+    divider.className = 'cmd-action-divider';
+    divider.innerHTML = '<span>or, if deck already has cards</span>';
+
+    // ── Fill Remaining (secondary action) ──
+    const fillWrap = document.createElement('div');
+    fillWrap.className = 'cmd-action-secondary';
 
     const fillBtn = document.createElement('button');
     fillBtn.id = 'fill-deck-btn';
-    fillBtn.className = 'btn';
-    fillBtn.style.cssText = 'width:100%;margin-top:5px;font-size:0.82rem;';
+    fillBtn.className = 'btn cmd-action-btn';
     const remaining = deckLimit() - deckTotal();
     const bLabel = state.budgetThreshold ? ` ≤$${state.budgetThreshold}` : '';
     fillBtn.textContent = remaining > 0 ? `Fill Remaining Slots${bLabel} (${remaining})` : 'Deck Full';
     fillBtn.disabled = remaining <= 0;
     fillBtn.addEventListener('click', fillDeck);
 
-    zone.append(zoneHeader, cmdRow, buildBtn, fillBtn);
+    const fillDesc = document.createElement('p');
+    fillDesc.className = 'cmd-action-desc';
+    fillDesc.textContent = 'Keeps your current cards and fills empty slots with synergy picks.';
+
+    fillWrap.append(fillBtn, fillDesc);
+
+    zone.append(zoneHeader, cmdRow, buildWrap, divider, fillWrap);
     container.appendChild(zone);
   }
 

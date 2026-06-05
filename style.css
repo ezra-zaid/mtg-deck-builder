@@ -1168,6 +1168,52 @@ select { cursor: pointer; }
   border-color: var(--gold-light);
 }
 
+/* ===== COMMANDER ZONE ACTIONS ===== */
+.cmd-action-primary {
+  margin-top: 10px;
+}
+
+.cmd-action-btn {
+  width: 100%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 8px;
+}
+
+.cmd-action-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: 4px 2px 0;
+  line-height: 1.35;
+}
+
+.cmd-action-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.cmd-action-divider::before,
+.cmd-action-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.cmd-action-secondary .cmd-action-btn {
+  font-size: 0.78rem;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.cmd-action-secondary .cmd-action-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+
 /* ===== LAND MODE SELECTOR ===== */
 .land-mode-group {
   display: flex;
