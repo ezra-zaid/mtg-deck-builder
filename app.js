@@ -109,7 +109,68 @@ function setCommander(card) {
   showToast(`${card.name} set as Commander`, 'success');
 }
 
-async function buildDeck() {
+function showBuildDeckModal() {
+  if (!state.commander) { showToast('Set a Commander first!', 'warn'); return; }
+
+  const wrap = document.createElement('div');
+  const title = h('h3', `Build Deck for ${state.commander.name}`);
+
+  // Land count
+  const countLabel = document.createElement('label');
+  countLabel.style.cssText = 'display:block;font-size:0.82rem;color:var(--text-secondary);margin:12px 0 4px;';
+  countLabel.textContent = 'Number of lands:';
+  const countIn = document.createElement('input');
+  countIn.type = 'number'; countIn.min = '20'; countIn.max = '50'; countIn.value = '37';
+  countIn.style.cssText = 'width:80px;margin-bottom:14px;';
+
+  // Land mode radio group
+  const modeLabel = document.createElement('p');
+  modeLabel.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);margin-bottom:8px;';
+  modeLabel.textContent = 'Land type:';
+
+  const modes = [
+    { value: 'basic',    label: 'Basic lands only',                desc: 'Plains, Islands, Swamps, etc. — reliable and budget-friendly' },
+    { value: 'nonbasic', label: 'Non-basic lands (EDHRec)',         desc: 'Command Tower, Fetch lands, Shocks — fill remaining slots with basics' },
+    { value: 'none',     label: 'No lands — I\'ll add them myself', desc: 'Skip lands entirely and manage manually' },
+  ];
+
+  let selectedMode = 'basic';
+  const radioWrap = document.createElement('div');
+  radioWrap.className = 'land-mode-group';
+
+  modes.forEach(m => {
+    const row = document.createElement('label');
+    row.className = 'land-mode-row';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = 'land-mode'; radio.value = m.value;
+    if (m.value === 'basic') radio.checked = true;
+    radio.addEventListener('change', () => { selectedMode = m.value; });
+    const textWrap = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = m.label;
+    const desc = document.createElement('span');
+    desc.className = 'land-mode-desc';
+    desc.textContent = ' — ' + m.desc;
+    textWrap.append(strong, desc);
+    row.append(radio, textWrap);
+    radioWrap.appendChild(row);
+  });
+
+  const buildBtn = document.createElement('button');
+  buildBtn.className = 'btn btn-gold tune-full-btn';
+  buildBtn.style.marginTop = '14px';
+  buildBtn.textContent = 'Build Deck';
+  buildBtn.addEventListener('click', () => {
+    const landCount = Math.max(0, Math.min(50, parseInt(countIn.value) || 37));
+    hideModal();
+    buildDeck({ landMode: selectedMode, landCount });
+  });
+
+  wrap.append(title, countLabel, countIn, modeLabel, radioWrap, buildBtn);
+  showModal(wrap);
+}
+
+async function buildDeck({ landMode = 'basic', landCount = 37 } = {}) {
   if (!state.commander) { showToast('Set a Commander first!', 'warn'); return; }
 
   const btn = document.getElementById('build-deck-btn');
@@ -118,18 +179,38 @@ async function buildDeck() {
   try {
     state.deck = {};
     const ci = state.commander.color_identity || [];
-    const ciStr = ci.join('') || 'C';
 
     showToast('Fetching top-ranked cards...', 'info');
+    const spellCount = landMode === 'none' ? 99 : (99 - landCount);
     const q = `commander:"${state.commander.name}" -t:land`;
     const data = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent(q)}&order=edhrec&unique=cards`);
-    const topCards = (data && data.data ? data.data : []).filter(c => c.id !== state.commander.id);
+    const topCards = (data?.data || []).filter(c => c.id !== state.commander.id);
+    topCards.filter(isColorLegal).slice(0, spellCount).forEach(card => { state.deck[card.id] = { card, qty: 1 }; });
 
-    // 62 spells + 37 lands = 99 (+ commander = 100)
-    topCards.filter(isColorLegal).slice(0, 62).forEach(card => { state.deck[card.id] = { card, qty: 1 }; });
+    if (landMode === 'basic') {
+      showToast('Adding basic lands...', 'info');
+      await addBasicLands(ci, landCount);
 
-    showToast('Adding lands...', 'info');
-    await addBasicLands(ci, 37);
+    } else if (landMode === 'nonbasic') {
+      showToast('Fetching non-basic lands...', 'info');
+      const landQ = `commander:"${state.commander.name}" t:land -t:basic`;
+      const landData = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent(landQ)}&order=edhrec&unique=cards`);
+      const nonbasics = (landData?.data || []).filter(c => isColorLegal(c));
+
+      let nonbasicCount = 0;
+      for (const card of nonbasics) {
+        if (nonbasicCount >= landCount) break;
+        if (!state.deck[card.id]) { state.deck[card.id] = { card, qty: 1 }; nonbasicCount++; }
+      }
+
+      // Fill remaining land slots with basics
+      const basicNeeded = landCount - nonbasicCount;
+      if (basicNeeded > 0) {
+        showToast(`Adding ${basicNeeded} basic land(s)...`, 'info');
+        await addBasicLands(ci, basicNeeded);
+      }
+    }
+    // landMode === 'none': skip lands entirely
 
     updateDeckUI();
     showToast(`Deck built! ${deckTotal()} cards + ${state.commander.name}`, 'success');
@@ -415,19 +496,28 @@ async function addBasicLands(colorIdentity, count) {
   const colors = colorIdentity.filter(c => landMap[c]);
 
   if (!colors.length) {
-    const wastes = await cardByName('Wastes');
+    // Colorless commanders get Wastes
+    const data = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent('!"Wastes" t:basic')}&unique=cards`);
+    const wastes = data?.data?.[0];
     if (wastes) state.deck[wastes.id] = { card: wastes, qty: count };
     return;
   }
 
+  // Single batch search for all needed basics
+  const names = colors.map(c => landMap[c]);
+  const q = `(${names.map(n => `!"${n}"`).join(' OR ')}) t:basic`;
+  const data = await apiGet(`${SCRYFALL}/cards/search?q=${encodeURIComponent(q)}&unique=cards`);
+
+  const byName = {};
+  (data?.data || []).forEach(card => { byName[card.name] = card; });
+
   const perColor = Math.floor(count / colors.length);
   const remainder = count % colors.length;
 
-  for (let i = 0; i < colors.length; i++) {
-    const land = await cardByName(landMap[colors[i]]);
-    if (land) state.deck[land.id] = { card: land, qty: perColor + (i < remainder ? 1 : 0) };
-    await delay(120);
-  }
+  colors.forEach((color, i) => {
+    const card = byName[landMap[color]];
+    if (card) state.deck[card.id] = { card, qty: perColor + (i < remainder ? 1 : 0) };
+  });
 }
 
 // ==================== DECK MANAGEMENT ====================
@@ -1824,7 +1914,7 @@ function renderDeck() {
     buildBtn.className = 'btn btn-gold';
     buildBtn.style.cssText = 'width:100%;margin-top:8px;font-size:0.82rem;';
     buildBtn.textContent = 'Auto-Build Deck';
-    buildBtn.addEventListener('click', buildDeck);
+    buildBtn.addEventListener('click', showBuildDeckModal);
 
     const fillBtn = document.createElement('button');
     fillBtn.id = 'fill-deck-btn';

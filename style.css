@@ -1168,6 +1168,41 @@ select { cursor: pointer; }
   border-color: var(--gold-light);
 }
 
+/* ===== LAND MODE SELECTOR ===== */
+.land-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.land-mode-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.land-mode-row:hover {
+  border-color: var(--gold);
+  background: var(--bg-hover);
+}
+
+.land-mode-row input[type="radio"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--gold);
+}
+
+.land-mode-desc {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
 /* ===== SHARE BUTTON ===== */
 .btn-share {
   background: #1e3a5f;
